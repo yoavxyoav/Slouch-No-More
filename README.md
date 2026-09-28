@@ -1,4 +1,4 @@
-# my-fucking-back
+# Slouch No More
 
 macOS menu bar app that watches your webcam and nags you when you slouch.
 Everything runs locally — no frames are stored, nothing leaves the machine.
@@ -6,8 +6,8 @@ Everything runs locally — no frames are stored, nothing leaves the machine.
 ## Install
 
 ```bash
-git clone https://github.com/yoavxyoav/my-fucking-back.git
-cd my-fucking-back
+git clone https://github.com/yoavxyoav/slouch-no-more.git
+cd slouch-no-more
 uv sync
 uv run posture-guard
 ```
