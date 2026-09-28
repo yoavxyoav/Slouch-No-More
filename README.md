@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Slouch No More" width="320">
+</p>
+
 # Slouch No More
 
 macOS menu bar app that watches your webcam and nags you when you slouch.
