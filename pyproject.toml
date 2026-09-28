@@ -1,0 +1,27 @@
+[project]
+name = "posture-guard"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Yoav Vollansky", email = "4323333+yoavxyoav@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "mediapipe<1.0",
+    "opencv-python>=5.0.0.93",
+    "rumps>=0.4.0",
+]
+
+[project.scripts]
+posture-guard = "posture_guard:main"
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+]
