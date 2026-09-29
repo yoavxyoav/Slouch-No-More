@@ -18,6 +18,13 @@ logger = logging.getLogger("posture_guard.alerts")
 BUNDLE_ID = "com.yoavxyoav.slouch-no-more"
 _bundle_id_ready = False
 
+# tiny AppleScript applet bundled in assets/: notifications sent through it are
+# attributed to "Slouch No More" (name + icon) instead of a generic "python3"
+NOTIFIER_BIN = (
+    Path(__file__).resolve().parents[2]
+    / "assets" / "notifier" / "Slouch No More.app" / "Contents" / "MacOS" / "applet"
+)
+
 
 def _ensure_bundle_id() -> None:
     """NSUserNotificationCenter needs a bundle identifier; a bare python
@@ -35,6 +42,16 @@ def _ensure_bundle_id() -> None:
 
 
 def notify(title: str, message: str) -> None:
+    if NOTIFIER_BIN.exists():
+        try:
+            subprocess.Popen(
+                [str(NOTIFIER_BIN), title, message],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return
+        except OSError:
+            logger.exception("branded notifier failed; falling back")
     # native notifications display reliably; osascript ones are attributed to
     # Script Editor, which macOS blocks by default
     try:
