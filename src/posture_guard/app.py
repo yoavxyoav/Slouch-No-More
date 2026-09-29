@@ -261,6 +261,7 @@ class PostureGuardApp(rumps.App):
                 ),
                 ok="Calibrate now",
                 cancel="Later",
+                icon_path=str(LOGO_PATH) if LOGO_PATH.exists() else None,
             )
         except Exception:
             logger.exception("calibration offer dialog failed")
@@ -391,6 +392,14 @@ class PostureGuardApp(rumps.App):
             if time.time() - self._splash_started < SPLASH_SECONDS:
                 return
             self._close_splash()
+            try:
+                # re-assert once the run loop is live: set at __init__ it can
+                # be reset during app activation
+                icon_image = AppKit.NSImage.alloc().initByReferencingFile_(str(LOGO_PATH))
+                if icon_image is not None:
+                    AppKit.NSApplication.sharedApplication().setApplicationIconImage_(icon_image)
+            except Exception:
+                logger.exception("could not set app icon")
             if self.store.active is None and not self._calibration_offered:
                 self._offer_calibration()
         if self._viewcam and self._preview_proc is None and not self.capturing:
@@ -647,6 +656,7 @@ class PostureGuardApp(rumps.App):
             ),
             ok="Clear",
             cancel="Cancel",
+            icon_path=str(LOGO_PATH) if LOGO_PATH.exists() else None,
         )
         if response != 1:
             return
