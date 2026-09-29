@@ -176,6 +176,15 @@ class PostureGuardApp(rumps.App):
         self._sync_toggle_states()
         self._rebuild_profiles_menu()
 
+        try:
+            # dialogs (NSAlert/rumps.Window) show the app icon; a bare python
+            # process has none, so they'd display a generic folder otherwise
+            icon_image = AppKit.NSImage.alloc().initByReferencingFile_(str(LOGO_PATH))
+            if icon_image is not None:
+                AppKit.NSApplication.sharedApplication().setApplicationIconImage_(icon_image)
+        except Exception:
+            logger.exception("could not set app icon")
+
         self._splash_window: object | None = None
         self._splash_started = 0.0
         self._calibration_offered = False
