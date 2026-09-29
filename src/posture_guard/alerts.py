@@ -4,6 +4,7 @@ menu bar title, handled by the app itself."""
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import threading
 import time
@@ -44,8 +45,11 @@ def _ensure_bundle_id() -> None:
 def notify(title: str, message: str) -> None:
     if NOTIFIER_BIN.exists():
         try:
+            # the applet binary drops CLI argv when launched directly, so the
+            # text travels via environment variables instead
             subprocess.Popen(
-                [str(NOTIFIER_BIN), title, message],
+                [str(NOTIFIER_BIN)],
+                env={**os.environ, "PG_NTITLE": title, "PG_NMSG": message},
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
