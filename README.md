@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Slouch No More" width="320">
+  <img src="assets/logo-animated.gif" alt="Slouch No More" width="320">
 </p>
 
 # Slouch No More

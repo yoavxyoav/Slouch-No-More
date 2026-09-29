@@ -8,7 +8,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
+# ~/.posture-guard so logs survive app-bundle rebuilds and are easy to find
+LOG_DIR = Path.home() / ".posture-guard" / "logs"
 
 
 class JsonFormatter(logging.Formatter):
