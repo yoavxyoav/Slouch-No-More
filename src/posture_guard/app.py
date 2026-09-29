@@ -78,7 +78,7 @@ LAUNCH_AGENT_PLIST = """<?xml version="1.0" encoding="UTF-8"?>
 
 class PostureGuardApp(rumps.App):
     def __init__(self) -> None:
-        super().__init__("Posture Guard", title=ICON_PAUSED, quit_button=None)
+        super().__init__("Slouch No More", title=ICON_PAUSED, quit_button=None)
         self.config = Config.load()
         self.store = ProfileStore()
         self.alerter = Alerter(self.config)

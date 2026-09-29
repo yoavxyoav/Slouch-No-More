@@ -136,12 +136,12 @@ class Alerter:
 
     def slouch(self) -> None:
         if self.config.alert_notification:
-            notify("Posture Guard", "You're slouching - sit up straight.")
+            notify("Slouch No More", "You're slouching - sit up straight.")
         if self.config.alert_sound:
             play_sound(self.config.sound_slouch)
 
     def info(self, message: str, sound: bool = False) -> None:
         if self.config.alert_notification:
-            notify("Posture Guard", message)
+            notify("Slouch No More", message)
         if sound and self.config.alert_sound:
             play_sound(self.config.sound_info)
