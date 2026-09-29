@@ -224,16 +224,28 @@ class PostureGuardApp(rumps.App):
 
     def _offer_calibration(self) -> None:
         self._calibration_offered = True
-        response = rumps.alert(
-            title="Slouch No More",
-            message=(
-                "No calibration yet - I need to learn what your good posture "
-                "and your slouch look like (about 20 seconds, with voice "
-                "guidance)."
-            ),
-            ok="Calibrate now",
-            cancel="Later",
-        )
+        self.status_item.title = "State: uncalibrated"
+        self._set_title(ICONS[Posture.UNCALIBRATED])
+        try:
+            # menu bar apps don't activate on their own: without this the modal
+            # dialog can open BEHIND other windows and invisibly block startup
+            AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+        except Exception:
+            logger.exception("could not activate app before calibration offer")
+        try:
+            response = rumps.alert(
+                title="Slouch No More",
+                message=(
+                    "No calibration yet - I need to learn what your good "
+                    "posture and your slouch look like (about 20 seconds, "
+                    "with voice guidance)."
+                ),
+                ok="Calibrate now",
+                cancel="Later",
+            )
+        except Exception:
+            logger.exception("calibration offer dialog failed")
+            return
         if response == 1:
             self.on_calibrate(None)
 
