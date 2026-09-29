@@ -414,7 +414,14 @@ class PostureGuardApp(rumps.App):
             self._preview_border = (80, 220, 80)  # green = GOOD phase
             self._start_preview("Step 1 of 2 - your GOOD posture")
             self._say(
-                "Calibration. Step one: sit tall, in your best posture.",
+                "Welcome! We're going to calibrate your posture. First I'll "
+                "capture your good posture, then your slouch. The whole thing "
+                "takes about twenty seconds.",
+                blocking=True,
+                key="welcome",
+            )
+            self._say(
+                "Step one: sit tall, in your best posture.",
                 blocking=True,
                 key="intro",
             )
