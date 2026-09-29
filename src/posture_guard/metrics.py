@@ -27,8 +27,10 @@ RIGHT_SHOULDER = 12
 # normalized-coordinate features (~0..1).
 TILT_SCALE = 100.0
 
+# shoulder_mid_x (not nose_x) carries the lateral signal: it still catches
+# camera pans and seat shifts, but tilting the head left/right barely moves it
 FEATURE_NAMES = [
-    "nose_x",
+    "shoulder_mid_x",
     "nose_y",
     "shoulder_mid_y",
     "shoulder_width",
@@ -41,6 +43,7 @@ FEATURE_NAMES = [
 class PostureMetrics:
     nose_x: float
     nose_y: float
+    shoulder_mid_x: float
     shoulder_mid_y: float
     shoulder_width: float
     head_drop: float  # nose_y - shoulder_mid_y; grows as the head sinks
@@ -48,7 +51,7 @@ class PostureMetrics:
 
     def to_vector(self) -> list[float]:
         return [
-            self.nose_x,
+            self.shoulder_mid_x,
             self.nose_y,
             self.shoulder_mid_y,
             self.shoulder_width,
@@ -65,6 +68,7 @@ def median_metrics(samples: Sequence[PostureMetrics]) -> PostureMetrics | None:
     return PostureMetrics(
         nose_x=med(s.nose_x for s in samples),
         nose_y=med(s.nose_y for s in samples),
+        shoulder_mid_x=med(s.shoulder_mid_x for s in samples),
         shoulder_mid_y=med(s.shoulder_mid_y for s in samples),
         shoulder_width=med(s.shoulder_width for s in samples),
         head_drop=med(s.head_drop for s in samples),
@@ -91,6 +95,7 @@ def metrics_from_landmarks(landmarks: Sequence[_LandmarkLike]) -> PostureMetrics
         if getattr(lm, "visibility", 1.0) < 0.5:
             return None
 
+    shoulder_mid_x = (ls.x + rs.x) / 2.0
     shoulder_mid_y = (ls.y + rs.y) / 2.0
     dx = ls.x - rs.x
     dy = ls.y - rs.y
@@ -107,6 +112,7 @@ def metrics_from_landmarks(landmarks: Sequence[_LandmarkLike]) -> PostureMetrics
     return PostureMetrics(
         nose_x=nose.x,
         nose_y=nose.y,
+        shoulder_mid_x=shoulder_mid_x,
         shoulder_mid_y=shoulder_mid_y,
         shoulder_width=shoulder_width,
         head_drop=nose.y - shoulder_mid_y,

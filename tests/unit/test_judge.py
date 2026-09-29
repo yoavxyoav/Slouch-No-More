@@ -15,6 +15,7 @@ def make_metrics(
     return PostureMetrics(
         nose_x=nose_x,
         nose_y=nose_y,
+        shoulder_mid_x=nose_x,
         shoulder_mid_y=shoulder_mid_y,
         shoulder_width=shoulder_width,
         head_drop=nose_y - shoulder_mid_y,

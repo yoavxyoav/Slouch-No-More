@@ -444,14 +444,14 @@ class PostureGuardApp(rumps.App):
         """Approximate nose + shoulder pixel positions from a saved cluster's
         feature means (profiles store features, not pixels; shoulder-mid x is
         assumed under the nose, which holds for a roughly frontal camera)."""
-        nose_x, nose_y, mid_y, width, _head_drop, tilt_scaled = stats.mean
+        mid_x, nose_y, mid_y, width, _head_drop, tilt_scaled = stats.mean
         tilt = math.radians(tilt_scaled * TILT_SCALE)
         half_dx = (width / 2) * math.cos(tilt)
         half_dy = (width / 2) * math.sin(tilt)
         return {
-            NOSE: (int(nose_x * w), int(nose_y * h)),
-            LEFT_SHOULDER: (int((nose_x + half_dx) * w), int((mid_y + half_dy) * h)),
-            RIGHT_SHOULDER: (int((nose_x - half_dx) * w), int((mid_y - half_dy) * h)),
+            NOSE: (int(mid_x * w), int(nose_y * h)),
+            LEFT_SHOULDER: (int((mid_x + half_dx) * w), int((mid_y + half_dy) * h)),
+            RIGHT_SHOULDER: (int((mid_x - half_dx) * w), int((mid_y - half_dy) * h)),
         }
 
     def on_toggle_viewcam(self, _s: rumps.MenuItem) -> None:

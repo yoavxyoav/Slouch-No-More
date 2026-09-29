@@ -9,6 +9,7 @@ def make_metrics(nose_y: float, nose_x: float = 0.5) -> PostureMetrics:
     return PostureMetrics(
         nose_x=nose_x,
         nose_y=nose_y,
+        shoulder_mid_x=nose_x,
         shoulder_mid_y=nose_y + 0.25,
         shoulder_width=0.3,
         head_drop=-0.25,
@@ -103,4 +104,15 @@ def test_clear_all(tmp_path: Path) -> None:
     assert store.profiles == []
     assert store.active is None
     reloaded = ProfileStore(path=tmp_path / "profiles.json")
+    assert reloaded.profiles == []
+
+
+def test_schema_change_invalidates_profiles(tmp_path: Path) -> None:
+    path = tmp_path / "profiles.json"
+    store = ProfileStore(path=path)
+    store.add(new_profile("desk", samples(0.35), samples(0.48)))
+    payload = json.loads(path.read_text())
+    payload["feature_names"] = ["old_feature"] + payload["feature_names"][1:]
+    path.write_text(json.dumps(payload))
+    reloaded = ProfileStore(path=path)
     assert reloaded.profiles == []

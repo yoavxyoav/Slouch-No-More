@@ -199,6 +199,10 @@ class ProfileStore:
             payload = json.loads(self.path.read_text())
         except (json.JSONDecodeError, OSError):
             return
+        if payload.get("feature_names") != FEATURE_NAMES:
+            # the feature schema changed: stored centroids no longer line up
+            # with live vectors, so the profiles must be recalibrated
+            return
         self.profiles = [
             Profile(
                 profile_id=raw["profile_id"],
