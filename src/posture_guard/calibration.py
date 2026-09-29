@@ -147,6 +147,11 @@ class ProfileStore:
             self.active_id = profile_id
             self.save()
 
+    def clear_all(self) -> None:
+        self.profiles = []
+        self.active_id = None
+        self.save()
+
     def delete(self, profile_id: str) -> None:
         self.profiles = [p for p in self.profiles if p.profile_id != profile_id]
         if self.active_id == profile_id:

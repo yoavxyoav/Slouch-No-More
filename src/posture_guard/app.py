@@ -7,10 +7,12 @@ debounced supervisor, updates the icon, and fires alerts.
 
 from __future__ import annotations
 
+import math
 import subprocess
 import sys
 import threading
 import time
+from dataclasses import fields
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -26,7 +28,13 @@ from posture_guard.config import Config
 from posture_guard.detector import PoseDetector
 from posture_guard.judge import Event, Posture, Supervisor, classify
 from posture_guard.logging_setup import setup_logging
-from posture_guard.metrics import FEATURE_NAMES, PostureMetrics, median_metrics
+from posture_guard.detector import LEFT_SHOULDER, NOSE, RIGHT_SHOULDER
+from posture_guard.metrics import (
+    FEATURE_NAMES,
+    TILT_SCALE,
+    PostureMetrics,
+    median_metrics,
+)
 
 logger = setup_logging()
 
@@ -101,6 +109,7 @@ class PostureGuardApp(rumps.App):
         # when set (after the GOOD capture), the preview shows a live
         # "difference from GOOD" readout so the user can slouch until it passes
         self._gap_stats: FeatureStats | None = None
+        self._viewcam = False
 
         self.status_item = rumps.MenuItem("Starting...")
         self.pause_item = rumps.MenuItem("Pause", callback=self.on_pause)
@@ -119,6 +128,7 @@ class PostureGuardApp(rumps.App):
             f"Snapshot mode (camera opens every {self.config.snapshot_interval:.0f}s)",
             callback=self.on_toggle_snapshot,
         )
+        self.viewcam_item = rumps.MenuItem("View camera", callback=self.on_toggle_viewcam)
         self.sound_bad_menu = rumps.MenuItem("Bad-posture sound")
         self.sound_good_menu = rumps.MenuItem("Recovery sound")
         self.delay_menu = rumps.MenuItem("Alert after slouching for...")
@@ -138,6 +148,8 @@ class PostureGuardApp(rumps.App):
         self.settings_menu.add(self.voice_item)
         self.settings_menu.add(self.intro_item)
         self.settings_menu.add(self.login_item)
+        self.advanced_menu = rumps.MenuItem("Advanced...")
+        self.settings_menu.add(self.advanced_menu)
         self.settings_menu.add(
             rumps.MenuItem("Open config file...", callback=self.on_open_config)
         )
@@ -150,6 +162,7 @@ class PostureGuardApp(rumps.App):
             self.pause_item,
             None,
             self.cal_item,
+            self.viewcam_item,
             self.profiles_menu,
             None,
             self.toggle_notif,
@@ -226,12 +239,9 @@ class PostureGuardApp(rumps.App):
         self._calibration_offered = True
         self.status_item.title = "State: uncalibrated"
         self._set_title(ICONS[Posture.UNCALIBRATED])
-        try:
-            # menu bar apps don't activate on their own: without this the modal
-            # dialog can open BEHIND other windows and invisibly block startup
-            AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
-        except Exception:
-            logger.exception("could not activate app before calibration offer")
+        # menu bar apps don't activate on their own: without this the modal
+        # dialog can open BEHIND other windows and invisibly block startup
+        self._activate_app()
         try:
             response = rumps.alert(
                 title="Slouch No More",
@@ -293,8 +303,22 @@ class PostureGuardApp(rumps.App):
                 sub_ok = diff >= target
                 verdict = "enough!" if sub_ok else "slouch harder"
                 sub_text = f"difference from GOOD: {diff:.1f} / need {target:.1f} - {verdict}"
+        ghosts: list[tuple[dict[int, tuple[int, int]], tuple[int, int, int], str]] = []
+        if self._ghost_points:
+            ghosts.append((self._ghost_points, (255, 200, 60), "blue = your GOOD pose"))
+        if self._viewcam:
+            active = self.store.active
+            size = self.detector.frame_size
+            if active is not None and size is not None:
+                w, h = size
+                ghosts.append(
+                    (self._pose_from_stats(active.good, w, h), (255, 200, 60), "blue = saved GOOD")
+                )
+                ghosts.append(
+                    (self._pose_from_stats(active.slouch, w, h), (90, 90, 255), "red = saved SLOUCH")
+                )
         data = self.detector.annotated_frame(
-            self._preview_text, self._ghost_points, sub_text, sub_ok, self._preview_border
+            self._preview_text, ghosts, sub_text, sub_ok, self._preview_border
         )
         if data is None:
             return
@@ -360,6 +384,9 @@ class PostureGuardApp(rumps.App):
             self._close_splash()
             if self.store.active is None and not self._calibration_offered:
                 self._offer_calibration()
+        if self._viewcam and self._preview_proc is None and not self.capturing:
+            self._viewcam = False  # viewer window was closed (Esc)
+            self.viewcam_item.state = 0
         if self.paused or self.capturing:
             return
         now = time.time()
@@ -411,6 +438,35 @@ class PostureGuardApp(rumps.App):
 
     def _set_title(self, icon: str) -> None:
         self.title = icon if self.config.alert_icon else "PG"
+
+    @staticmethod
+    def _pose_from_stats(stats: FeatureStats, w: int, h: int) -> dict[int, tuple[int, int]]:
+        """Approximate nose + shoulder pixel positions from a saved cluster's
+        feature means (profiles store features, not pixels; shoulder-mid x is
+        assumed under the nose, which holds for a roughly frontal camera)."""
+        nose_x, nose_y, mid_y, width, _head_drop, tilt_scaled = stats.mean
+        tilt = math.radians(tilt_scaled * TILT_SCALE)
+        half_dx = (width / 2) * math.cos(tilt)
+        half_dy = (width / 2) * math.sin(tilt)
+        return {
+            NOSE: (int(nose_x * w), int(nose_y * h)),
+            LEFT_SHOULDER: (int((nose_x + half_dx) * w), int((mid_y + half_dy) * h)),
+            RIGHT_SHOULDER: (int((nose_x - half_dx) * w), int((mid_y - half_dy) * h)),
+        }
+
+    def on_toggle_viewcam(self, _s: rumps.MenuItem) -> None:
+        if self._viewcam:
+            self._viewcam = False
+            if not self.capturing:
+                self._stop_preview()
+        else:
+            self._viewcam = True
+            self._wake.set()
+            if not self.capturing:
+                self._preview_text = "Live view (Esc or menu to close)"
+                self._preview_border = None
+                self._start_preview(self._preview_text)
+        self.viewcam_item.state = 1 if self._viewcam else 0
 
     # ---------- calibration ----------
 
@@ -553,11 +609,42 @@ class PostureGuardApp(rumps.App):
             item.state = 1 if p.profile_id == self.store.active_id else 0
             item.profile_id = p.profile_id  # type: ignore[attr-defined]
             self.profiles_menu.add(item)
+        self.profiles_menu.add(
+            rumps.MenuItem("Clear all profiles...", callback=self.on_clear_profiles)
+        )
 
     def _on_profile_selected(self, sender: rumps.MenuItem) -> None:
         self.store.activate(sender.profile_id)  # type: ignore[attr-defined]
         self.supervisor.reset(time.time())
         self._rebuild_profiles_menu()
+
+    @staticmethod
+    def _activate_app() -> None:
+        """Bring the app frontmost so modal dialogs can't open hidden."""
+        try:
+            AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+        except Exception:
+            logger.exception("could not activate app")
+
+    def on_clear_profiles(self, _s: rumps.MenuItem) -> None:
+        if not self.store.profiles:
+            return
+        self._activate_app()
+        response = rumps.alert(
+            title="Clear all profiles?",
+            message=(
+                f"This deletes all {len(self.store.profiles)} saved calibration "
+                "profile(s). You'll need to calibrate again."
+            ),
+            ok="Clear",
+            cancel="Cancel",
+        )
+        if response != 1:
+            return
+        self.store.clear_all()
+        self.supervisor.reset(time.time())
+        self._rebuild_profiles_menu()
+        logger.info("all profiles cleared")
 
     def on_pause(self, sender: rumps.MenuItem) -> None:
         self.paused = not self.paused
@@ -612,6 +699,12 @@ class PostureGuardApp(rumps.App):
             self.repeat_menu.add(item)
         self.login_item.state = 1 if LAUNCH_AGENT_PATH.exists() else 0
         self.voice_item.state = 1 if self.config.voice_guidance else 0
+        self._reset_submenu(self.advanced_menu)
+        for f in fields(Config):
+            value = getattr(self.config, f.name)
+            item = rumps.MenuItem(f"{f.name} = {value}", callback=self._on_edit_config_var)
+            item.field_name = f.name  # type: ignore[attr-defined]
+            self.advanced_menu.add(item)
         self.intro_item.state = 0 if self.config.skip_calibration_intro else 1
 
     def _on_pick_sound(self, sender: rumps.MenuItem) -> None:
@@ -665,6 +758,53 @@ class PostureGuardApp(rumps.App):
             logger.info("launch agent installed (active from next login): %s", binary)
         self._build_settings_menus()
 
+    def _on_edit_config_var(self, sender: rumps.MenuItem) -> None:
+        name = sender.field_name  # type: ignore[attr-defined]
+        current = getattr(self.config, name)
+        self._activate_app()
+        window = rumps.Window(
+            message=f"{name} (current: {current!r})",
+            title="Edit setting",
+            default_text=str(current),
+            ok="Save",
+            cancel="Cancel",
+        )
+        response = window.run()
+        if response.clicked != 1:
+            return
+        raw = response.text.strip()
+        try:
+            value: object
+            if isinstance(current, bool):
+                if raw.lower() not in ("true", "false", "1", "0", "yes", "no"):
+                    raise ValueError(raw)
+                value = raw.lower() in ("true", "1", "yes")
+            elif isinstance(current, float):
+                value = float(raw)
+            elif isinstance(current, int):
+                value = int(raw)
+            else:
+                value = raw
+        except ValueError:
+            self.alerter.info(f"'{raw}' is not a valid value for {name} - unchanged.")
+            return
+        setattr(self.config, name, value)
+        self.config.save()
+        logger.info("config %s -> %r", name, value)
+        self._apply_config()
+
+    def _apply_config(self) -> None:
+        """Re-apply the live config to everything that caches pieces of it."""
+        self.alerter.config = self.config
+        self.supervisor.slouch_alert_seconds = self.config.slouch_alert_seconds
+        self.supervisor.alert_repeat_seconds = self.config.alert_repeat_seconds
+        self.supervisor.camera_move_seconds = self.config.camera_move_seconds
+        self.toggle_snapshot.title = (
+            f"Snapshot mode (camera opens every {self.config.snapshot_interval:.0f}s)"
+        )
+        self._sync_toggle_states()
+        self._build_settings_menus()
+
     def on_open_config(self, _s: rumps.MenuItem) -> None:
         if not DEFAULT_CONFIG_PATH.exists():
             self.config.save()
@@ -672,18 +812,8 @@ class PostureGuardApp(rumps.App):
 
     def on_reload_config(self, _s: rumps.MenuItem) -> None:
         self.config = Config.load()
-        self.alerter.config = self.config
-        self.supervisor = Supervisor(
-            slouch_alert_seconds=self.config.slouch_alert_seconds,
-            alert_repeat_seconds=self.config.alert_repeat_seconds,
-            camera_move_seconds=self.config.camera_move_seconds,
-        )
         self.supervisor.reset(time.time())
-        self._sync_toggle_states()
-        self.toggle_snapshot.title = (
-            f"Snapshot mode (camera opens every {self.config.snapshot_interval:.0f}s)"
-        )
-        self._build_settings_menus()
+        self._apply_config()
         logger.info("config reloaded")
         self.alerter.info("Config reloaded.")
 

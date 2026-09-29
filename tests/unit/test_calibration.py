@@ -93,3 +93,14 @@ def test_separation_low_for_similar_postures() -> None:
 def test_separation_high_for_distinct_postures() -> None:
     profile = new_profile("good", samples(0.35), samples(0.48))
     assert profile.separation() >= 2.5
+
+
+def test_clear_all(tmp_path: Path) -> None:
+    store = ProfileStore(path=tmp_path / "profiles.json")
+    store.add(new_profile("a", samples(0.35), samples(0.48)))
+    store.add(new_profile("b", samples(0.20), samples(0.33)))
+    store.clear_all()
+    assert store.profiles == []
+    assert store.active is None
+    reloaded = ProfileStore(path=tmp_path / "profiles.json")
+    assert reloaded.profiles == []

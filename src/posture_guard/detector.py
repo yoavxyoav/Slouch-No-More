@@ -147,27 +147,35 @@ class PoseDetector:
             ls, rs = points[LEFT_SHOULDER], points[RIGHT_SHOULDER]
             cv2.line(frame, (w - ls[0], ls[1]), (w - rs[0], rs[1]), color, 3 if filled else 2)
 
+    @property
+    def frame_size(self) -> tuple[int, int] | None:
+        """(width, height) of the last frame, if any. Worker thread only."""
+        if self._last_frame is None:
+            return None
+        h, w = self._last_frame.shape[:2]
+        return w, h
+
     def annotated_frame(
         self,
         text: str,
-        ghost_points: dict[int, tuple[int, int]] | None = None,
+        ghosts: list[tuple[dict[int, tuple[int, int]], tuple[int, int, int], str]] | None = None,
         sub_text: str | None = None,
         sub_ok: bool = False,
         border: tuple[int, int, int] | None = None,
     ) -> bytes | None:
         """Last frame, mirrored, with tracked points and a status banner,
-        JPEG-encoded for the preview window. `ghost_points` (e.g. the captured
-        GOOD pose) are drawn hollow in blue for comparison; `sub_text` is a
-        second banner line (green when `sub_ok`); `border` tints the frame
-        edge to signal the current calibration phase. Worker thread only."""
+        JPEG-encoded for the preview window. Each ghost is (points, color,
+        label) drawn hollow for comparison (e.g. a captured or saved pose);
+        `sub_text` is a second banner line (green when `sub_ok`); `border`
+        tints the frame edge to signal the calibration phase. Worker thread only."""
         if self._last_frame is None:
             return None
         frame = cv2.flip(self._last_frame, 1)
         h, w = frame.shape[:2]
-        if ghost_points:
-            self._draw_pose(frame, ghost_points, (255, 200, 60), filled=False)
-            cv2.putText(frame, "blue = your GOOD pose", (20, h - 20),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 200, 60), 2)
+        for idx, (points, color, label) in enumerate(ghosts or []):
+            self._draw_pose(frame, points, color, filled=False)
+            cv2.putText(frame, label, (20, h - 20 - 30 * idx),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
         self._draw_pose(frame, self._last_points, (80, 220, 80), filled=True)
         if not self._last_points:
             cv2.putText(frame, "NOT DETECTING A PERSON", (30, h - 30),
