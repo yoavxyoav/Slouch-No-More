@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+from pathlib import Path
 
 from posture_guard.config import Config
 
@@ -25,14 +26,21 @@ def notify(title: str, message: str) -> None:
         logger.exception("failed to send notification")
 
 
-def speak(text: str, blocking: bool = False) -> None:
-    """Speak text via macOS TTS. Blocking keeps sequential phrases from
-    talking over each other (used for the calibration countdown)."""
+VOICE_DIR = Path(__file__).resolve().parents[2] / "assets" / "voice"
+
+
+def speak(text: str, blocking: bool = False, phrase_key: str | None = None) -> None:
+    """Speak a calibration phrase. Pre-generated Kokoro TTS clips (bundled in
+    assets/voice, keyed by `phrase_key`) sound far better than macOS `say`,
+    which remains the fallback when a clip is missing. Blocking keeps
+    sequential phrases from talking over each other (the countdown)."""
+    clip = VOICE_DIR / f"{phrase_key}.mp3" if phrase_key else None
+    cmd = ["afplay", str(clip)] if clip is not None and clip.exists() else ["say", text]
     try:
         if blocking:
-            subprocess.run(["say", text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
-            subprocess.Popen(["say", text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except OSError:
         logger.exception("failed to speak")
 

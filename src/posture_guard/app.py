@@ -15,6 +15,8 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 
+import AppKit
+import Foundation
 import rumps
 
 from posture_guard.alerts import Alerter, play_sound, speak
@@ -39,6 +41,9 @@ ICON_PAUSED = "⏸"
 
 CAPTURE_COUNTDOWN = 3.0
 CAPTURE_WINDOW = 5.0
+
+LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "logo.png"
+SPLASH_SECONDS = 2.5
 
 SYSTEM_SOUNDS_DIR = Path("/System/Library/Sounds")
 ALERT_DELAY_CHOICES = (5, 10, 15, 20, 30, 60)
@@ -152,15 +157,79 @@ class PostureGuardApp(rumps.App):
         self._sync_toggle_states()
         self._rebuild_profiles_menu()
 
+        self._splash_window: object | None = None
+        self._splash_started = 0.0
+        self._calibration_offered = False
+        self._show_splash()
+
         self.detector.start()
         self._worker = threading.Thread(target=self._worker_loop, daemon=True)
         self._worker.start()
         self._timer = rumps.Timer(self.on_tick, 1)
         self._timer.start()
-        if self.store.active is None:
-            self.alerter.info(
-                "No calibration yet - use the menu to capture a GOOD and a SLOUCH posture."
+
+    # ---------- splash ----------
+
+    def _show_splash(self) -> None:
+        try:
+            if not LOGO_PATH.exists():
+                return
+            image = AppKit.NSImage.alloc().initByReferencingFile_(str(LOGO_PATH))
+            if image is None:
+                return
+            size = 360.0
+            screen = AppKit.NSScreen.mainScreen().frame()
+            rect = Foundation.NSMakeRect(
+                (screen.size.width - size) / 2,
+                (screen.size.height - size) / 2,
+                size,
+                size,
             )
+            window = AppKit.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+                rect,
+                AppKit.NSWindowStyleMaskBorderless,
+                AppKit.NSBackingStoreBuffered,
+                False,
+            )
+            window.setOpaque_(False)
+            window.setBackgroundColor_(AppKit.NSColor.clearColor())
+            window.setLevel_(AppKit.NSFloatingWindowLevel)
+            window.setHasShadow_(False)
+            view = AppKit.NSImageView.alloc().initWithFrame_(
+                Foundation.NSMakeRect(0, 0, size, size)
+            )
+            view.setImage_(image)
+            view.setImageScaling_(AppKit.NSImageScaleProportionallyUpOrDown)
+            window.setContentView_(view)
+            window.orderFrontRegardless()
+            self._splash_window = window
+            self._splash_started = time.time()
+        except Exception:
+            logger.exception("splash failed")
+
+    def _close_splash(self) -> None:
+        window = self._splash_window
+        self._splash_window = None
+        if window is not None:
+            try:
+                window.orderOut_(None)  # type: ignore[attr-defined]
+            except Exception:
+                logger.exception("splash close failed")
+
+    def _offer_calibration(self) -> None:
+        self._calibration_offered = True
+        response = rumps.alert(
+            title="Slouch No More",
+            message=(
+                "No calibration yet - I need to learn what your good posture "
+                "and your slouch look like (about 20 seconds, with voice "
+                "guidance)."
+            ),
+            ok="Calibrate now",
+            cancel="Later",
+        )
+        if response == 1:
+            self.on_calibrate(None)
 
     # ---------- worker ----------
 
@@ -253,6 +322,12 @@ class PostureGuardApp(rumps.App):
     # ---------- main loop ----------
 
     def on_tick(self, _timer: rumps.Timer) -> None:
+        if self._splash_window is not None:
+            if time.time() - self._splash_started < SPLASH_SECONDS:
+                return
+            self._close_splash()
+            if self.store.active is None and not self._calibration_offered:
+                self._offer_calibration()
         if self.paused or self.capturing:
             return
         now = time.time()
@@ -314,18 +389,18 @@ class PostureGuardApp(rumps.App):
         self._wake.set()  # worker may be mid-sleep in snapshot mode
         threading.Thread(target=self._calibrate_worker, daemon=True).start()
 
-    def _say(self, text: str, blocking: bool = False) -> None:
+    def _say(self, text: str, blocking: bool = False, key: str | None = None) -> None:
         if self.config.voice_guidance:
-            speak(text, blocking=blocking)
+            speak(text, blocking=blocking, phrase_key=key)
 
     def _capture_phase(self, kind: str, hint: str) -> list[PostureMetrics]:
         for remaining in range(int(CAPTURE_COUNTDOWN), 0, -1):
             self._preview_text = f"{hint} - capturing in {remaining}..."
             tick_start = time.time()
-            self._say(str(remaining), blocking=True)
+            self._say(str(remaining), blocking=True, key=str(remaining))
             time.sleep(max(0.0, 1.0 - (time.time() - tick_start)))
         self._preview_text = f"CAPTURING {kind} - hold it!"
-        self._say("Hold it.")
+        self._say("Hold it.", key="hold")
         time.sleep(1.0)  # settle: don't let getting-into-position frames into the stats
         start = time.time()
         time.sleep(CAPTURE_WINDOW)
@@ -339,14 +414,16 @@ class PostureGuardApp(rumps.App):
             self._preview_border = (80, 220, 80)  # green = GOOD phase
             self._start_preview("Step 1 of 2 - your GOOD posture")
             self._say(
-                "Calibration. Step one: sit tall, in your best posture.", blocking=True
+                "Calibration. Step one: sit tall, in your best posture.",
+                blocking=True,
+                key="intro",
             )
             good = self._capture_phase(
                 "GOOD", "Step 1/2: sit TALL - back straight, chin up"
             )
             if len(good) < 4:
                 self._preview_text = "FAILED - I couldn't see you. Try again."
-                self._say("I couldn't see you. Try again.")
+                self._say("I couldn't see you. Try again.", key="not_seen")
                 self.alerter.info("Not enough pose samples - make sure you're in frame.", sound=True)
                 time.sleep(3)
                 return
@@ -359,6 +436,7 @@ class PostureGuardApp(rumps.App):
                 "Great. Step two: now slouch. Chin down, shoulders forward. "
                 "Make it dramatic.",
                 blocking=True,
+                key="step_two",
             )
             time.sleep(1.0)
             slouch = self._capture_phase(
@@ -366,7 +444,7 @@ class PostureGuardApp(rumps.App):
             )
             if len(slouch) < 4:
                 self._preview_text = "FAILED - I couldn't see you. Try again."
-                self._say("I couldn't see you. Try again.")
+                self._say("I couldn't see you. Try again.", key="not_seen")
                 self.alerter.info("Not enough pose samples - make sure you're in frame.", sound=True)
                 time.sleep(3)
                 return
@@ -390,7 +468,10 @@ class PostureGuardApp(rumps.App):
             if separation < self.config.separation_min:
                 # clusters overlap: classification would flap, alerts never fire
                 self._preview_text = "TOO SIMILAR - run it again, exaggerate the slouch!"
-                self._say("Too similar. Run it again, and really slouch this time.")
+                self._say(
+                    "Too similar. Run it again, and really slouch this time.",
+                    key="too_similar",
+                )
                 self.alerter.info(
                     "Your GOOD and SLOUCH postures look almost the same to the "
                     "camera - run calibration again and really slouch.",
@@ -402,7 +483,7 @@ class PostureGuardApp(rumps.App):
             self.supervisor.reset(time.time())
             self._rebuild_profiles_menu()
             self._preview_text = f"Saved '{name}' - watching your posture now."
-            self._say("Calibration saved. I'm watching your posture now.")
+            self._say("Calibration saved. I'm watching your posture now.", key="saved")
             self.alerter.info(f"Calibration saved as '{name}' - watching your posture now.", sound=True)
             time.sleep(2.5)
         finally:

@@ -14,7 +14,7 @@ mkdir -p "$APP/Contents/MacOS" "$RES/app"
 
 # --- bundle the project (source, model, lockfile - no venv, no logs) ---
 rsync -a --delete \
-  --include='src/***' --include='models/***' \
+  --include='src/***' --include='models/***' --include='assets/***' \
   --include='pyproject.toml' --include='uv.lock' --include='README.md' \
   --exclude='*' "$ROOT/" "$RES/app/"
 
