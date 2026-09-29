@@ -88,5 +88,15 @@ fi
 cd "$DIST"
 rm -f SlouchNoMore.zip
 ditto -c -k --keepParent "Slouch No More.app" SlouchNoMore.zip
+
+# --- pkg installer: double-click installs into /Applications ---
+rm -f SlouchNoMore.pkg
+pkgbuild --component "Slouch No More.app" \
+  --identifier com.yoavxyoav.slouch-no-more \
+  --version 0.1.0 \
+  --install-location /Applications \
+  SlouchNoMore.pkg >/dev/null
+
 echo "Built: $APP"
 echo "Zip:   $DIST/SlouchNoMore.zip"
+echo "Pkg:   $DIST/SlouchNoMore.pkg"

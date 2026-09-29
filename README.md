@@ -9,11 +9,13 @@ Everything runs locally — no frames are stored, nothing leaves the machine.
 
 ## Install
 
-**Easiest — the app bundle:** download `SlouchNoMore.zip` from
-[Releases](https://github.com/yoavxyoav/slouch-no-more/releases), unzip, drag
-**Slouch No More.app** to Applications, and open it. The app is unsigned, so
-the first launch needs right-click -> Open. First run takes a minute
-(it sets up its Python environment) and asks for camera permission.
+**Easiest — the installer:** download `SlouchNoMore.pkg` from
+[Releases](https://github.com/yoavxyoav/slouch-no-more/releases) and open it
+(unsigned, so the first open needs right-click -> Open). It installs
+**Slouch No More** into Applications; launch it from Spotlight or Launchpad.
+First run takes a minute (it sets up its Python environment) and asks for
+camera permission. Prefer no installer? `SlouchNoMore.zip` on the same page
+is the raw app - unzip and drag to Applications yourself.
 
 **From source:**
 
