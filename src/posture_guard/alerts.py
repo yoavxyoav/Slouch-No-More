@@ -25,6 +25,18 @@ def notify(title: str, message: str) -> None:
         logger.exception("failed to send notification")
 
 
+def speak(text: str, blocking: bool = False) -> None:
+    """Speak text via macOS TTS. Blocking keeps sequential phrases from
+    talking over each other (used for the calibration countdown)."""
+    try:
+        if blocking:
+            subprocess.run(["say", text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            subprocess.Popen(["say", text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        logger.exception("failed to speak")
+
+
 def play_sound(path: str) -> None:
     try:
         subprocess.Popen(

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import rumps
 
-from posture_guard.alerts import Alerter, play_sound
+from posture_guard.alerts import Alerter, play_sound, speak
 from posture_guard.calibration import FeatureStats, ProfileStore, new_profile
 from posture_guard.config import DEFAULT_CONFIG_PATH
 from posture_guard.config import Config
@@ -117,11 +117,15 @@ class PostureGuardApp(rumps.App):
         self.delay_menu = rumps.MenuItem("Alert after slouching for...")
         self.repeat_menu = rumps.MenuItem("Repeat alert...")
         self.login_item = rumps.MenuItem("Start at login", callback=self.on_toggle_login)
+        self.voice_item = rumps.MenuItem(
+            "Voice guidance in calibration", callback=self.on_toggle_voice
+        )
         self.settings_menu = rumps.MenuItem("Settings")
         self.settings_menu.add(self.sound_bad_menu)
         self.settings_menu.add(self.sound_good_menu)
         self.settings_menu.add(self.delay_menu)
         self.settings_menu.add(self.repeat_menu)
+        self.settings_menu.add(self.voice_item)
         self.settings_menu.add(self.login_item)
         self.settings_menu.add(
             rumps.MenuItem("Open config file...", callback=self.on_open_config)
@@ -310,11 +314,18 @@ class PostureGuardApp(rumps.App):
         self._wake.set()  # worker may be mid-sleep in snapshot mode
         threading.Thread(target=self._calibrate_worker, daemon=True).start()
 
+    def _say(self, text: str, blocking: bool = False) -> None:
+        if self.config.voice_guidance:
+            speak(text, blocking=blocking)
+
     def _capture_phase(self, kind: str, hint: str) -> list[PostureMetrics]:
         for remaining in range(int(CAPTURE_COUNTDOWN), 0, -1):
             self._preview_text = f"{hint} - capturing in {remaining}..."
-            time.sleep(1)
+            tick_start = time.time()
+            self._say(str(remaining), blocking=True)
+            time.sleep(max(0.0, 1.0 - (time.time() - tick_start)))
         self._preview_text = f"CAPTURING {kind} - hold it!"
+        self._say("Hold it.")
         time.sleep(1.0)  # settle: don't let getting-into-position frames into the stats
         start = time.time()
         time.sleep(CAPTURE_WINDOW)
@@ -327,11 +338,15 @@ class PostureGuardApp(rumps.App):
         try:
             self._preview_border = (80, 220, 80)  # green = GOOD phase
             self._start_preview("Step 1 of 2 - your GOOD posture")
+            self._say(
+                "Calibration. Step one: sit tall, in your best posture.", blocking=True
+            )
             good = self._capture_phase(
                 "GOOD", "Step 1/2: sit TALL - back straight, chin up"
             )
             if len(good) < 4:
                 self._preview_text = "FAILED - I couldn't see you. Try again."
+                self._say("I couldn't see you. Try again.")
                 self.alerter.info("Not enough pose samples - make sure you're in frame.", sound=True)
                 time.sleep(3)
                 return
@@ -340,12 +355,18 @@ class PostureGuardApp(rumps.App):
             self._gap_stats = FeatureStats.from_samples(good)
             self._preview_border = (60, 160, 255)  # orange = SLOUCH phase
             self._preview_text = "Step 2 of 2 - now your WORST slouch"
-            time.sleep(2.5)
+            self._say(
+                "Great. Step two: now slouch. Chin down, shoulders forward. "
+                "Make it dramatic.",
+                blocking=True,
+            )
+            time.sleep(1.0)
             slouch = self._capture_phase(
                 "SLOUCH", "Step 2/2: collapse - chin down, shoulders forward"
             )
             if len(slouch) < 4:
                 self._preview_text = "FAILED - I couldn't see you. Try again."
+                self._say("I couldn't see you. Try again.")
                 self.alerter.info("Not enough pose samples - make sure you're in frame.", sound=True)
                 time.sleep(3)
                 return
@@ -369,6 +390,7 @@ class PostureGuardApp(rumps.App):
             if separation < self.config.separation_min:
                 # clusters overlap: classification would flap, alerts never fire
                 self._preview_text = "TOO SIMILAR - run it again, exaggerate the slouch!"
+                self._say("Too similar. Run it again, and really slouch this time.")
                 self.alerter.info(
                     "Your GOOD and SLOUCH postures look almost the same to the "
                     "camera - run calibration again and really slouch.",
@@ -380,6 +402,7 @@ class PostureGuardApp(rumps.App):
             self.supervisor.reset(time.time())
             self._rebuild_profiles_menu()
             self._preview_text = f"Saved '{name}' - watching your posture now."
+            self._say("Calibration saved. I'm watching your posture now.")
             self.alerter.info(f"Calibration saved as '{name}' - watching your posture now.", sound=True)
             time.sleep(2.5)
         finally:
@@ -461,6 +484,7 @@ class PostureGuardApp(rumps.App):
             item.repeat_seconds = seconds  # type: ignore[attr-defined]
             self.repeat_menu.add(item)
         self.login_item.state = 1 if LAUNCH_AGENT_PATH.exists() else 0
+        self.voice_item.state = 1 if self.config.voice_guidance else 0
 
     def _on_pick_sound(self, sender: rumps.MenuItem) -> None:
         if sender.sound_kind == "bad":  # type: ignore[attr-defined]
@@ -485,6 +509,11 @@ class PostureGuardApp(rumps.App):
         self.supervisor.alert_repeat_seconds = seconds
         self.config.save()
         logger.info("alert repeat -> %s", "once" if seconds == 0 else f"{seconds}s")
+        self._build_settings_menus()
+
+    def on_toggle_voice(self, _s: rumps.MenuItem) -> None:
+        self.config.voice_guidance = not self.config.voice_guidance
+        self.config.save()
         self._build_settings_menus()
 
     def on_toggle_login(self, _s: rumps.MenuItem) -> None:

@@ -9,6 +9,14 @@ Everything runs locally — no frames are stored, nothing leaves the machine.
 
 ## Install
 
+**Easiest — the app bundle:** download `SlouchNoMore.zip` from
+[Releases](https://github.com/yoavxyoav/slouch-no-more/releases), unzip, drag
+**Slouch No More.app** to Applications, and open it. The app is unsigned, so
+the first launch needs right-click -> Open. First run takes a minute
+(it sets up its Python environment) and asks for camera permission.
+
+**From source:**
+
 ```bash
 git clone https://github.com/yoavxyoav/slouch-no-more.git
 cd slouch-no-more
@@ -17,7 +25,8 @@ uv run posture-guard
 ```
 
 Requires macOS and [uv](https://docs.astral.sh/uv/). First run asks for
-camera permission for your terminal.
+camera permission for your terminal. To rebuild the app bundle:
+`./scripts/build_app.sh` (output in `dist/`).
 
 ## How it works
 

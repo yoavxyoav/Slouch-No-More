@@ -16,6 +16,7 @@ class Config:
     alert_sound: bool = True
     alert_icon: bool = True
     back_to_good_chime: bool = True  # soft chime when posture recovers after an alert
+    voice_guidance: bool = True  # spoken instructions + countdown during calibration
 
     # capture
     capture_mode: str = "continuous"  # "continuous" | "snapshot"

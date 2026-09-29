@@ -6,3 +6,4 @@ prompts.txt
 history.log
 .claude/
 .coderabbit*
+dist/
