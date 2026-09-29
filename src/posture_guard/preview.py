@@ -32,8 +32,12 @@ def main() -> None:
             if frame is None:
                 continue
             cv2.imshow(WINDOW, frame)
-            if cv2.waitKey(1) & 0xFF == 27:  # Esc closes early
+            key = cv2.waitKey(1) & 0xFF
+            if key == 27:  # Esc closes early
                 break
+            if key in (ord("s"), ord("S")):  # skip the intro speech
+                sys.stdout.write("SKIP\n")
+                sys.stdout.flush()
     finally:
         cv2.destroyAllWindows()
 

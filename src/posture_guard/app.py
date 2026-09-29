@@ -19,7 +19,7 @@ import AppKit
 import Foundation
 import rumps
 
-from posture_guard.alerts import Alerter, play_sound, speak
+from posture_guard.alerts import Alerter, play_sound, speak, speak_cancellable
 from posture_guard.calibration import FeatureStats, ProfileStore, new_profile
 from posture_guard.config import DEFAULT_CONFIG_PATH
 from posture_guard.config import Config
@@ -90,6 +90,8 @@ class PostureGuardApp(rumps.App):
         self._stop = threading.Event()
         # kicks the worker out of a snapshot-mode sleep (e.g. calibration start)
         self._wake = threading.Event()
+        # set when the user presses S in the preview to skip the intro speech
+        self._skip_intro = threading.Event()
 
         # calibration preview window (separate process, frames over stdin)
         self._preview_proc: subprocess.Popen[bytes] | None = None
@@ -125,12 +127,16 @@ class PostureGuardApp(rumps.App):
         self.voice_item = rumps.MenuItem(
             "Voice guidance in calibration", callback=self.on_toggle_voice
         )
+        self.intro_item = rumps.MenuItem(
+            "Calibration intro speech", callback=self.on_toggle_intro
+        )
         self.settings_menu = rumps.MenuItem("Settings")
         self.settings_menu.add(self.sound_bad_menu)
         self.settings_menu.add(self.sound_good_menu)
         self.settings_menu.add(self.delay_menu)
         self.settings_menu.add(self.repeat_menu)
         self.settings_menu.add(self.voice_item)
+        self.settings_menu.add(self.intro_item)
         self.settings_menu.add(self.login_item)
         self.settings_menu.add(
             rumps.MenuItem("Open config file...", callback=self.on_open_config)
@@ -293,8 +299,22 @@ class PostureGuardApp(rumps.App):
         self._preview_proc = subprocess.Popen(
             [sys.executable, "-m", "posture_guard.preview"],
             stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
         )
+        threading.Thread(
+            target=self._preview_stdout_reader, args=(self._preview_proc,), daemon=True
+        ).start()
         logger.info("preview window opened")
+
+    def _preview_stdout_reader(self, proc: subprocess.Popen[bytes]) -> None:
+        try:
+            if proc.stdout is None:
+                return
+            for line in proc.stdout:
+                if b"SKIP" in line:
+                    self._skip_intro.set()
+        except (OSError, ValueError):
+            pass
 
     def _stop_preview(self) -> None:
         proc = self._preview_proc
@@ -413,18 +433,25 @@ class PostureGuardApp(rumps.App):
         try:
             self._preview_border = (80, 220, 80)  # green = GOOD phase
             self._start_preview("Step 1 of 2 - your GOOD posture")
-            self._say(
-                "Welcome! We're going to calibrate your posture. First I'll "
-                "capture your good posture, then your slouch. The whole thing "
-                "takes about twenty seconds.",
-                blocking=True,
-                key="welcome",
-            )
-            self._say(
-                "Step one: sit tall, in your best posture.",
-                blocking=True,
-                key="intro",
-            )
+            self._skip_intro.clear()
+            if self.config.voice_guidance and not self.config.skip_calibration_intro:
+                self._preview_text = "Step 1 of 2 - GOOD posture  (S = skip intro)"
+                skipped = speak_cancellable(
+                    "Welcome! We're going to calibrate your posture. First I'll "
+                    "capture your good posture, then your slouch. The whole "
+                    "thing takes about twenty seconds.",
+                    self._skip_intro,
+                    phrase_key="welcome",
+                ) or speak_cancellable(
+                    "Step one: sit tall, in your best posture.",
+                    self._skip_intro,
+                    phrase_key="intro",
+                )
+                if skipped:
+                    self.config.skip_calibration_intro = True
+                    self.config.save()
+                    self._build_settings_menus()
+                    logger.info("intro skipped; skip_calibration_intro saved")
             good = self._capture_phase(
                 "GOOD", "Step 1/2: sit TALL - back straight, chin up"
             )
@@ -573,6 +600,7 @@ class PostureGuardApp(rumps.App):
             self.repeat_menu.add(item)
         self.login_item.state = 1 if LAUNCH_AGENT_PATH.exists() else 0
         self.voice_item.state = 1 if self.config.voice_guidance else 0
+        self.intro_item.state = 0 if self.config.skip_calibration_intro else 1
 
     def _on_pick_sound(self, sender: rumps.MenuItem) -> None:
         if sender.sound_kind == "bad":  # type: ignore[attr-defined]
@@ -601,6 +629,11 @@ class PostureGuardApp(rumps.App):
 
     def on_toggle_voice(self, _s: rumps.MenuItem) -> None:
         self.config.voice_guidance = not self.config.voice_guidance
+        self.config.save()
+        self._build_settings_menus()
+
+    def on_toggle_intro(self, _s: rumps.MenuItem) -> None:
+        self.config.skip_calibration_intro = not self.config.skip_calibration_intro
         self.config.save()
         self._build_settings_menus()
 
