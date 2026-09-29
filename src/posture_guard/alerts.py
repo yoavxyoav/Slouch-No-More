@@ -9,12 +9,45 @@ import threading
 import time
 from pathlib import Path
 
+import AppKit
+
 from posture_guard.config import Config
 
 logger = logging.getLogger("posture_guard.alerts")
 
+BUNDLE_ID = "com.yoavxyoav.slouch-no-more"
+_bundle_id_ready = False
+
+
+def _ensure_bundle_id() -> None:
+    """NSUserNotificationCenter needs a bundle identifier; a bare python
+    process has none, so inject one into the main bundle's info dict."""
+    global _bundle_id_ready
+    if _bundle_id_ready:
+        return
+    try:
+        info = AppKit.NSBundle.mainBundle().infoDictionary()
+        if info is not None and not info.get("CFBundleIdentifier"):
+            info["CFBundleIdentifier"] = BUNDLE_ID
+    except Exception:
+        logger.exception("could not inject bundle identifier")
+    _bundle_id_ready = True
+
 
 def notify(title: str, message: str) -> None:
+    # native notifications display reliably; osascript ones are attributed to
+    # Script Editor, which macOS blocks by default
+    try:
+        _ensure_bundle_id()
+        notification = AppKit.NSUserNotification.alloc().init()
+        notification.setTitle_(title)
+        notification.setInformativeText_(message)
+        center = AppKit.NSUserNotificationCenter.defaultUserNotificationCenter()
+        if center is not None:
+            center.deliverNotification_(notification)
+            return
+    except Exception:
+        logger.exception("native notification failed; falling back to osascript")
     script = 'display notification "{}" with title "{}"'.format(
         message.replace('"', "'"), title.replace('"', "'")
     )
