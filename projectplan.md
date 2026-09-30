@@ -39,3 +39,10 @@ Notable during build:
 
 Next candidates (not started): tune thresholds on real use, camera open/close
 on demand (light stays on now), threshold tuning UI, launch-at-login.
+
+## Advanced settings dialog + config validation (2026-09-30 14:58)
+- [x] `config.py`: per-field limits table, `validate()`, `parse_field` / `parse_settings`, validated `load()` with per-field fallback
+- [x] `settings_dialog.py`: single NSAlert form for all config values, inline error loop
+- [x] `app.py`: "Advanced..." opens the dialog; per-field submenu and single-line editor removed
+- [x] `tests/unit/test_config.py`, README, bugfix.md
+- Note: `camera_index` still needs a restart to take effect (detector is built once at startup); the dialog says so.

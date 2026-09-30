@@ -72,8 +72,12 @@ First run will ask for camera permission for your terminal app.
 The Settings submenu covers the common knobs: alert sounds (pick any macOS
 system sound), alert delay, repeat policy, start-at-login, and opening/reloading
 the config file. Alert channels (notification / sound / menu bar icon) and
-snapshot mode toggle directly from the menu. Everything persists in
-`~/.posture-guard/config.json`; the rest of the thresholds live there too.
+snapshot mode toggle directly from the menu. Settings > Advanced... opens one
+form with every config value (thresholds, intervals, camera index, sounds);
+entries are validated against the allowed ranges before anything is saved.
+Everything persists in `~/.posture-guard/config.json`. A hand-edited file goes
+through the same validation on load: any value that is mistyped or out of
+range falls back to its default and is logged.
 
 Pose detection uses Google's MediaPipe Pose Landmarker (lite) model, bundled
 in `models/` under its Apache 2.0 license.

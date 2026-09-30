@@ -12,7 +12,6 @@ import subprocess
 import sys
 import threading
 import time
-from dataclasses import fields
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -28,6 +27,7 @@ from posture_guard.config import Config
 from posture_guard.detector import PoseDetector
 from posture_guard.judge import Event, Posture, Supervisor, classify
 from posture_guard.logging_setup import setup_logging
+from posture_guard.settings_dialog import AdvancedSettingsDialog
 from posture_guard.detector import LEFT_SHOULDER, NOSE, RIGHT_SHOULDER
 from posture_guard.metrics import (
     FEATURE_NAMES,
@@ -148,8 +148,9 @@ class PostureGuardApp(rumps.App):
         self.settings_menu.add(self.voice_item)
         self.settings_menu.add(self.intro_item)
         self.settings_menu.add(self.login_item)
-        self.advanced_menu = rumps.MenuItem("Advanced...")
-        self.settings_menu.add(self.advanced_menu)
+        self.settings_menu.add(
+            rumps.MenuItem("Advanced...", callback=self.on_advanced)
+        )
         self.settings_menu.add(
             rumps.MenuItem("Open config file...", callback=self.on_open_config)
         )
@@ -718,12 +719,6 @@ class PostureGuardApp(rumps.App):
             self.repeat_menu.add(item)
         self.login_item.state = 1 if LAUNCH_AGENT_PATH.exists() else 0
         self.voice_item.state = 1 if self.config.voice_guidance else 0
-        self._reset_submenu(self.advanced_menu)
-        for f in fields(Config):
-            value = getattr(self.config, f.name)
-            item = rumps.MenuItem(f"{f.name} = {value}", callback=self._on_edit_config_var)
-            item.field_name = f.name  # type: ignore[attr-defined]
-            self.advanced_menu.add(item)
         self.intro_item.state = 0 if self.config.skip_calibration_intro else 1
 
     def _on_pick_sound(self, sender: rumps.MenuItem) -> None:
@@ -777,39 +772,24 @@ class PostureGuardApp(rumps.App):
             logger.info("launch agent installed (active from next login): %s", binary)
         self._build_settings_menus()
 
-    def _on_edit_config_var(self, sender: rumps.MenuItem) -> None:
-        name = sender.field_name  # type: ignore[attr-defined]
-        current = getattr(self.config, name)
+    def on_advanced(self, _s: rumps.MenuItem) -> None:
+        """Edit every config value in one validated form."""
         self._activate_app()
-        window = rumps.Window(
-            message=f"{name} (current: {current!r})",
-            title="Edit setting",
-            default_text=str(current),
-            ok="Save",
-            cancel="Cancel",
+        dialog = AdvancedSettingsDialog(
+            self.config,
+            LOGO_PATH if LOGO_PATH.exists() else None,
+            sorted(SYSTEM_SOUNDS_DIR.glob("*.aiff")),
         )
-        response = window.run()
-        if response.clicked != 1:
+        values = dialog.run()
+        if values is None:
             return
-        raw = response.text.strip()
-        try:
-            value: object
-            if isinstance(current, bool):
-                if raw.lower() not in ("true", "false", "1", "0", "yes", "no"):
-                    raise ValueError(raw)
-                value = raw.lower() in ("true", "1", "yes")
-            elif isinstance(current, float):
-                value = float(raw)
-            elif isinstance(current, int):
-                value = int(raw)
-            else:
-                value = raw
-        except ValueError:
-            self.alerter.info(f"'{raw}' is not a valid value for {name} - unchanged.")
+        changed = {k: v for k, v in values.items() if getattr(self.config, k) != v}
+        if not changed:
             return
-        setattr(self.config, name, value)
+        for name, value in changed.items():
+            setattr(self.config, name, value)
         self.config.save()
-        logger.info("config %s -> %r", name, value)
+        logger.info("advanced settings changed: %s", changed)
         self._apply_config()
 
     def _apply_config(self) -> None:
