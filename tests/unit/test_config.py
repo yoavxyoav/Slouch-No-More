@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from posture_guard.config import (
+    ADVANCED_FIELDS,
     CAPTURE_MODES,
     NUMERIC_LIMITS,
     Config,
@@ -24,6 +25,22 @@ def test_defaults_are_valid() -> None:
 def test_every_numeric_field_has_limits() -> None:
     numeric = {n for n, t in field_types().items() if t in (int, float)}
     assert numeric == set(NUMERIC_LIMITS)
+
+
+def test_advanced_fields_are_real_and_not_in_the_menu() -> None:
+    assert set(ADVANCED_FIELDS) <= set(field_types())
+    menu_fields = {
+        "alert_notification", "alert_sound", "alert_icon", "capture_mode",
+        "sound_slouch", "sound_info", "slouch_alert_seconds",
+        "alert_repeat_seconds", "voice_guidance", "skip_calibration_intro",
+    }
+    assert not menu_fields & set(ADVANCED_FIELDS)
+
+
+def test_parse_settings_accepts_a_subset_of_fields() -> None:
+    values, errors = parse_settings({"poll_interval": "0.25", "camera_index": "1"})
+    assert errors == {}
+    assert values == {"poll_interval": 0.25, "camera_index": 1}
 
 
 # ---------- parse_field ----------

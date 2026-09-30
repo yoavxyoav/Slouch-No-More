@@ -73,8 +73,9 @@ The Settings submenu covers the common knobs: alert sounds (pick any macOS
 system sound), alert delay, repeat policy, start-at-login, and opening/reloading
 the config file. Alert channels (notification / sound / menu bar icon) and
 snapshot mode toggle directly from the menu. Settings > Advanced... opens one
-form with every config value (thresholds, intervals, camera index, sounds);
-entries are validated against the allowed ranges before anything is saved.
+form with the remaining values (thresholds, intervals, camera index, recovery
+chime); entries are validated against the allowed ranges before anything is
+saved.
 Everything persists in `~/.posture-guard/config.json`. A hand-edited file goes
 through the same validation on load: any value that is mistyped or out of
 range falls back to its default and is logged.

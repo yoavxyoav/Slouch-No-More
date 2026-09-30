@@ -21,6 +21,20 @@ DEFAULT_CONFIG_PATH = Path.home() / ".posture-guard" / "config.json"
 
 CAPTURE_MODES = ("continuous", "snapshot")
 
+# Fields the Advanced... dialog edits: everything the regular menu has no
+# entry for (alert channels, sounds, delay, repeat, capture mode, voice and
+# intro toggles all live in the menu already).
+ADVANCED_FIELDS = (
+    "back_to_good_chime",
+    "snapshot_interval",
+    "poll_interval",
+    "camera_move_seconds",
+    "unknown_threshold",
+    "match_threshold",
+    "separation_min",
+    "camera_index",
+)
+
 # Inclusive [min, max] bounds for every numeric field. One table so the
 # settings dialog, the loader, and the tests all agree on what is sane.
 NUMERIC_LIMITS: dict[str, tuple[float, float]] = {

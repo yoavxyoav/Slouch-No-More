@@ -1,4 +1,4 @@
-"""One-window editor for every config value.
+"""One-window editor for the config values the menu does not expose.
 
 An NSAlert whose accessory view is a form: checkboxes for booleans, popups
 for fields with a fixed set of choices (capture mode, sounds), text fields
@@ -8,7 +8,6 @@ with the user's text intact until everything validates or they cancel.
 
 from __future__ import annotations
 
-from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +15,7 @@ import AppKit
 import Foundation
 
 from posture_guard.config import (
+    ADVANCED_FIELDS,
     CAPTURE_MODES,
     NUMERIC_LIMITS,
     Config,
@@ -46,12 +46,12 @@ class AdvancedSettingsDialog:
     def run(self) -> dict[str, Any] | None:
         """Show the form until the user saves valid values or cancels.
 
-        Returns {field: value} for every field on success, None on cancel.
+        Returns {field: value} for every advanced field on success, None on cancel.
         """
         state: dict[str, Any] = {}
-        for f in fields(Config):
-            value = getattr(self.config, f.name)
-            state[f.name] = value if isinstance(value, (bool, str)) else f"{value:g}"
+        for name in ADVANCED_FIELDS:
+            value = getattr(self.config, name)
+            state[name] = value if isinstance(value, (bool, str)) else f"{value:g}"
         errors: dict[str, str] = {}
         while True:
             alert = self._make_alert(state, errors)
@@ -82,7 +82,7 @@ class AdvancedSettingsDialog:
         return alert
 
     def _build_form(self, state: dict[str, Any], errors: dict[str, str]) -> Any:
-        names = [f.name for f in fields(Config)]
+        names = list(ADVANCED_FIELDS)
         height = ROW_HEIGHT * len(names)
         width = LABEL_WIDTH + COLUMN_GAP + CONTROL_WIDTH
         view = AppKit.NSView.alloc().initWithFrame_(Foundation.NSMakeRect(0, 0, width, height))
